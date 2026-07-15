@@ -1,8 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+type CookieToSet = {
+  name: string
+  value: string
+  options?: Parameters<NextResponse['cookies']['set']>[2]
+}
+
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,14 +20,19 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
+
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
+          })
+
+          supabaseResponse = NextResponse.next({
+            request,
+          })
+
+          cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, options)
-          )
+          })
         },
       },
     }
@@ -33,17 +46,22 @@ export async function middleware(request: NextRequest) {
 
   // Public routes
   const publicRoutes = ['/login', '/api/meta/webhook']
-  const isPublicRoute = publicRoutes.some((r) => pathname.startsWith(r))
+
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route)
+  )
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+
     return NextResponse.redirect(url)
   }
 
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
+
     return NextResponse.redirect(url)
   }
 

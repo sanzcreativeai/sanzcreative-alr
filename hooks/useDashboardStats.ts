@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { DashboardStats } from '@/types'
 
+type LeadStatusRow = {
+  status: string | null
+}
+
 export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -13,17 +17,34 @@ export function useDashboardStats() {
   useEffect(() => {
     async function fetchStats() {
       setLoading(true)
+      setError(null)
+
       try {
         const [clientsResult, leadsResult] = await Promise.all([
-          supabase.from('clients').select('id', { count: 'exact', head: true }),
-          supabase.from('leads').select('status'),
+          supabase
+            .from('clients')
+            .select('id', { count: 'exact', head: true }),
+
+          supabase
+            .from('leads')
+            .select('status'),
         ])
 
-        if (leadsResult.error) throw leadsResult.error
+        if (clientsResult.error) {
+          throw clientsResult.error
+        }
 
-        const leads = leadsResult.data ?? []
+        if (leadsResult.error) {
+          throw leadsResult.error
+        }
+
+        const leads = (leadsResult.data ?? []) as LeadStatusRow[]
+
         const total = leads.length
-        const byStatus = (s: string) => leads.filter((l) => l.status === s).length
+
+        const byStatus = (status: string) =>
+          leads.filter((lead) => lead.status === status).length
+
         const converted = byStatus('converted')
 
         setStats({
@@ -33,10 +54,17 @@ export function useDashboardStats() {
           contacted_leads: byStatus('contacted'),
           follow_up_leads: byStatus('follow_up'),
           converted_leads: converted,
-          conversion_rate: total > 0 ? Math.round((converted / total) * 1000) / 10 : 0,
+          conversion_rate:
+            total > 0
+              ? Math.round((converted / total) * 1000) / 10
+              : 0,
         })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load stats')
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to load stats'
+        )
       } finally {
         setLoading(false)
       }
@@ -45,5 +73,9 @@ export function useDashboardStats() {
     fetchStats()
   }, [])
 
-  return { stats, loading, error }
+  return {
+    stats,
+    loading,
+    error,
+  }
 }
