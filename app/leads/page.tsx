@@ -48,10 +48,14 @@ type Lead = {
   status: LeadStatus
   created_at: string
   client?: {
+    id?: string
     name: string
+    business_category?: string
   } | null
   campaign?: {
+    id?: string
     campaign_name: string
+    platform?: string
   } | null
 }
 
@@ -75,44 +79,110 @@ export default function LeadsPage() {
         setLoading(true)
         setError(null)
 
-        const [leadsResponse, clientsResponse, campaignsResponse] =
-          await Promise.all([
-            fetch('/api/leads', { cache: 'no-store' }),
-            fetch('/api/clients', { cache: 'no-store' }),
-            fetch('/api/campaigns', { cache: 'no-store' }),
-          ])
+        const [
+          leadsResponse,
+          clientsResponse,
+          campaignsResponse,
+        ] = await Promise.all([
+          fetch('/api/leads', {
+            cache: 'no-store',
+          }),
+          fetch('/api/clients', {
+            cache: 'no-store',
+          }),
+          fetch('/api/campaigns', {
+            cache: 'no-store',
+          }),
+        ])
 
         if (!leadsResponse.ok) {
           const data = await leadsResponse.json().catch(() => null)
-          throw new Error(data?.error || 'Failed to load leads')
+
+          throw new Error(
+            data?.error ||
+              `Failed to load leads (${leadsResponse.status})`
+          )
         }
 
         if (!clientsResponse.ok) {
           const data = await clientsResponse.json().catch(() => null)
-          throw new Error(data?.error || 'Failed to load clients')
+
+          throw new Error(
+            data?.error ||
+              `Failed to load clients (${clientsResponse.status})`
+          )
         }
 
         if (!campaignsResponse.ok) {
           const data = await campaignsResponse.json().catch(() => null)
-          throw new Error(data?.error || 'Failed to load campaigns')
+
+          throw new Error(
+            data?.error ||
+              `Failed to load campaigns (${campaignsResponse.status})`
+          )
         }
 
         const leadsData = await leadsResponse.json()
         const clientsData = await clientsResponse.json()
         const campaignsData = await campaignsResponse.json()
 
-        setLeads(Array.isArray(leadsData) ? leadsData : leadsData.leads ?? [])
-        setClients(
-          Array.isArray(clientsData) ? clientsData : clientsData.clients ?? []
+        /*
+         * Supports:
+         *
+         * { data: [...] }
+         * { leads: [...] }
+         * [...]
+         */
+        const loadedLeads: Lead[] = Array.isArray(leadsData)
+          ? leadsData
+          : Array.isArray(leadsData?.data)
+            ? leadsData.data
+            : Array.isArray(leadsData?.leads)
+              ? leadsData.leads
+              : []
+
+        /*
+         * Supports:
+         *
+         * { data: [...] }
+         * { clients: [...] }
+         * [...]
+         */
+        const loadedClients: Client[] = Array.isArray(clientsData)
+          ? clientsData
+          : Array.isArray(clientsData?.data)
+            ? clientsData.data
+            : Array.isArray(clientsData?.clients)
+              ? clientsData.clients
+              : []
+
+        /*
+         * Supports:
+         *
+         * { data: [...] }
+         * { campaigns: [...] }
+         * [...]
+         */
+        const loadedCampaigns: Campaign[] = Array.isArray(
+          campaignsData
         )
-        setCampaigns(
-          Array.isArray(campaignsData)
-            ? campaignsData
-            : campaignsData.campaigns ?? []
-        )
+          ? campaignsData
+          : Array.isArray(campaignsData?.data)
+            ? campaignsData.data
+            : Array.isArray(campaignsData?.campaigns)
+              ? campaignsData.campaigns
+              : []
+
+        setLeads(loadedLeads)
+        setClients(loadedClients)
+        setCampaigns(loadedCampaigns)
       } catch (err) {
+        console.error('[Leads Page] Failed to load data:', err)
+
         setError(
-          err instanceof Error ? err.message : 'Failed to load leads'
+          err instanceof Error
+            ? err.message
+            : 'Failed to load leads'
         )
       } finally {
         setLoading(false)
@@ -126,11 +196,15 @@ export default function LeadsPage() {
     return leads.filter((lead) => {
       const q = search.trim().toLowerCase()
 
+      const fullName = lead.full_name?.toLowerCase() ?? ''
+      const phone = lead.phone ?? ''
+      const email = lead.email?.toLowerCase() ?? ''
+
       const matchSearch =
         !q ||
-        lead.full_name.toLowerCase().includes(q) ||
-        lead.phone.includes(q) ||
-        (lead.email?.toLowerCase().includes(q) ?? false)
+        fullName.includes(q) ||
+        phone.includes(q) ||
+        email.includes(q)
 
       const matchClient =
         !filterClient || lead.client_id === filterClient
@@ -157,7 +231,9 @@ export default function LeadsPage() {
   ])
 
   const filteredCampaigns = useMemo(() => {
-    if (!filterClient) return campaigns
+    if (!filterClient) {
+      return campaigns
+    }
 
     return campaigns.filter(
       (campaign) => campaign.client_id === filterClient
@@ -165,7 +241,9 @@ export default function LeadsPage() {
   }, [campaigns, filterClient])
 
   const hasFilters = Boolean(
-    filterClient || filterCampaign || filterStatus
+    filterClient ||
+      filterCampaign ||
+      filterStatus
   )
 
   function clearFilters() {
@@ -176,14 +254,21 @@ export default function LeadsPage() {
 
   function handleClientFilterChange(clientId: string) {
     setFilterClient(clientId)
+
+    // Reset campaign because the selected campaign
+    // may belong to a different client.
     setFilterCampaign('')
   }
 
   if (loading) {
     return (
-      <AppLayout title="Leads" subtitle="Loading leads...">
+      <AppLayout
+        title="Leads"
+        subtitle="Loading leads..."
+      >
         <div className="card p-12 flex flex-col items-center justify-center">
           <Loader2 className="w-7 h-7 text-brand-400 animate-spin mb-3" />
+
           <p className="text-sm text-slate-400">
             Loading leads from database...
           </p>
@@ -212,7 +297,8 @@ export default function LeadsPage() {
         </div>
 
         <button
-          onClick={() => setShowFilters(!showFilters)}
+          type="button"
+          onClick={() => setShowFilters((current) => !current)}
           className={`btn-secondary ${
             hasFilters
               ? 'border-brand-500/40 text-brand-400'
@@ -237,18 +323,25 @@ export default function LeadsPage() {
         </button>
       </div>
 
-      {/* Error */}
+      {/* Error Message */}
       {error && (
         <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
-          <p className="text-sm text-red-400">{error}</p>
+          <p className="text-sm font-medium text-red-400">
+            {error}
+          </p>
+
+          <p className="text-xs text-red-300/70 mt-1">
+            Check the API route, Supabase connection, authentication,
+            and Row Level Security policies.
+          </p>
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters Panel */}
       {showFilters && (
         <div className="card p-4 mb-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Client */}
+            {/* Client Filter */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
                 Client
@@ -261,7 +354,9 @@ export default function LeadsPage() {
                 }
                 className="input-field"
               >
-                <option value="">All Clients</option>
+                <option value="">
+                  All Clients
+                </option>
 
                 {clients.map((client) => (
                   <option
@@ -274,7 +369,7 @@ export default function LeadsPage() {
               </select>
             </div>
 
-            {/* Campaign */}
+            {/* Campaign Filter */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
                 Campaign
@@ -287,7 +382,9 @@ export default function LeadsPage() {
                 }
                 className="input-field"
               >
-                <option value="">All Campaigns</option>
+                <option value="">
+                  All Campaigns
+                </option>
 
                 {filteredCampaigns.map((campaign) => (
                   <option
@@ -300,7 +397,7 @@ export default function LeadsPage() {
               </select>
             </div>
 
-            {/* Status */}
+            {/* Status Filter */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
                 Status
@@ -313,7 +410,9 @@ export default function LeadsPage() {
                 }
                 className="input-field"
               >
-                <option value="">All Statuses</option>
+                <option value="">
+                  All Statuses
+                </option>
 
                 {ALL_STATUSES.map((status) => (
                   <option
@@ -329,30 +428,35 @@ export default function LeadsPage() {
 
           {hasFilters && (
             <button
+              type="button"
               onClick={clearFilters}
               className="mt-3 btn-ghost text-xs text-slate-500"
             >
               <X className="w-3 h-3" />
+
               Clear filters
             </button>
           )}
         </div>
       )}
 
-      {/* Table */}
+      {/* Leads Table */}
       <div className="card overflow-hidden">
         {filtered.length === 0 ? (
           <EmptyState
             icon={UserCircle}
             title="No leads found"
             description={
-              leads.length === 0
-                ? 'No leads have been received yet'
-                : 'Try adjusting your search or filters'
+              error
+                ? 'Unable to load leads from the database'
+                : leads.length === 0
+                  ? 'No leads have been received yet'
+                  : 'Try adjusting your search or filters'
             }
             action={
               hasFilters || search ? (
                 <button
+                  type="button"
                   onClick={() => {
                     setSearch('')
                     clearFilters()
@@ -389,92 +493,101 @@ export default function LeadsPage() {
               </thead>
 
               <tbody>
-                {filtered.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    onClick={() => {
-                      window.location.href = `/leads/${lead.id}`
-                    }}
-                    className="table-row-hover border-b border-white/[0.04] last:border-0 group cursor-pointer"
-                  >
-                    {/* Lead */}
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-slate-200 font-medium text-xs">
-                          {lead.full_name}
-                        </p>
+                {filtered.map((lead) => {
+                  const clientName =
+                    lead.client?.name ||
+                    clients.find(
+                      (client) =>
+                        client.id === lead.client_id
+                    )?.name ||
+                    '—'
 
-                        <p className="text-slate-500 text-[11px]">
-                          {lead.phone}
-                        </p>
+                  const campaignName =
+                    lead.campaign?.campaign_name ||
+                    campaigns.find(
+                      (campaign) =>
+                        campaign.id === lead.campaign_id
+                    )?.campaign_name ||
+                    '—'
 
-                        {lead.email && (
-                          <p className="text-slate-600 text-[10px]">
-                            {lead.email}
+                  return (
+                    <tr
+                      key={lead.id}
+                      onClick={() => {
+                        window.location.href = `/leads/${lead.id}`
+                      }}
+                      className="table-row-hover border-b border-white/[0.04] last:border-0 group cursor-pointer"
+                    >
+                      {/* Lead */}
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="text-slate-200 font-medium text-xs">
+                            {lead.full_name || 'Unnamed Lead'}
                           </p>
-                        )}
-                      </div>
-                    </td>
 
-                    {/* Client */}
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {lead.client?.name ||
-                        clients.find(
-                          (client) =>
-                            client.id === lead.client_id
-                        )?.name ||
-                        '—'}
-                    </td>
+                          <p className="text-slate-500 text-[11px]">
+                            {lead.phone || '—'}
+                          </p>
 
-                    {/* Campaign */}
-                    <td className="px-4 py-3 text-xs text-slate-400 max-w-[180px]">
-                      <span className="truncate block">
-                        {lead.campaign?.campaign_name ||
-                          campaigns.find(
-                            (campaign) =>
-                              campaign.id ===
-                              lead.campaign_id
-                          )?.campaign_name ||
-                          '—'}
-                      </span>
-                    </td>
+                          {lead.email && (
+                            <p className="text-slate-600 text-[10px]">
+                              {lead.email}
+                            </p>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Source */}
-                    <td className="px-4 py-3 text-[11px] text-slate-500">
-                      {lead.source || '—'}
-                    </td>
+                      {/* Client */}
+                      <td className="px-4 py-3 text-xs text-slate-400">
+                        {clientName}
+                      </td>
 
-                    {/* Date */}
-                    <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
-                      {formatDateTime(lead.created_at)}
-                    </td>
+                      {/* Campaign */}
+                      <td className="px-4 py-3 text-xs text-slate-400 max-w-[180px]">
+                        <span className="truncate block">
+                          {campaignName}
+                        </span>
+                      </td>
 
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      <LeadStatusBadge
-                        status={lead.status}
-                      />
-                    </td>
+                      {/* Source */}
+                      <td className="px-4 py-3 text-[11px] text-slate-500">
+                        {lead.source || '—'}
+                      </td>
 
-                    {/* View */}
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/leads/${lead.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity btn-ghost text-xs py-1"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                      {/* Date & Time */}
+                      <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                        {formatDateTime(lead.created_at)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        <LeadStatusBadge
+                          status={lead.status}
+                        />
+                      </td>
+
+                      {/* View Lead */}
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/leads/${lead.id}`}
+                          onClick={(e) =>
+                            e.stopPropagation()
+                          }
+                          className="opacity-0 group-hover:opacity-100 transition-opacity btn-ghost text-xs py-1"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Count */}
+      {/* Count Footer */}
       {filtered.length > 0 && (
         <p className="text-xs text-slate-600 text-center mt-3">
           Showing {filtered.length} of {leads.length} leads
