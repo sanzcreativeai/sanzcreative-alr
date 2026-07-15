@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import AppLayout from '@/components/layout/AppLayout'
 import { LeadStatusBadge } from '@/components/ui/StatusBadge'
 import {
@@ -25,7 +26,6 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import type { LeadStatus } from '@/types'
-import Link from 'next/link'
 
 const ALL_STATUSES: LeadStatus[] = [
   'new',
@@ -96,17 +96,20 @@ export default function LeadDetailPage() {
   const params = useParams()
   const router = useRouter()
 
-  const leadId = Array.isArray(params.id)
-    ? params.id[0]
-    : params.id
+  // IMPORTANT FIX:
+  // Always guarantee that leadId is a string.
+  const leadId: string =
+    typeof params.id === 'string'
+      ? params.id
+      : Array.isArray(params.id)
+        ? params.id[0] ?? ''
+        : ''
 
   const [lead, setLead] = useState<Lead | null>(null)
   const [status, setStatus] = useState<LeadStatus>('new')
 
   const [notes, setNotes] = useState<LeadNote[]>([])
-  const [statusHistory, setStatusHistory] = useState<
-    StatusHistory[]
-  >([])
+  const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([])
 
   const [note, setNote] = useState('')
 
@@ -121,6 +124,7 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!leadId) {
+      setLoading(false)
       return
     }
 
@@ -128,6 +132,8 @@ export default function LeadDetailPage() {
       try {
         setLoading(true)
         setError(null)
+
+        const encodedLeadId = encodeURIComponent(leadId)
 
         const [
           leadsResponse,
@@ -139,18 +145,14 @@ export default function LeadDetailPage() {
           }),
 
           fetch(
-            `/api/leads/notes?lead_id=${encodeURIComponent(
-              leadId
-            )}`,
+            `/api/leads/notes?lead_id=${encodedLeadId}`,
             {
               cache: 'no-store',
             }
           ),
 
           fetch(
-            `/api/leads/status-history?lead_id=${encodeURIComponent(
-              leadId
-            )}`,
+            `/api/leads/status-history?lead_id=${encodedLeadId}`,
             {
               cache: 'no-store',
             }
@@ -185,7 +187,6 @@ export default function LeadDetailPage() {
 
         if (!foundLead) {
           setLead(null)
-          setLoading(false)
           return
         }
 
@@ -195,9 +196,7 @@ export default function LeadDetailPage() {
         if (notesResponse.ok) {
           const notesData = await notesResponse.json()
 
-          const loadedNotes: LeadNote[] = Array.isArray(
-            notesData
-          )
+          const loadedNotes: LeadNote[] = Array.isArray(notesData)
             ? notesData
             : Array.isArray(notesData?.data)
               ? notesData.data
@@ -221,9 +220,7 @@ export default function LeadDetailPage() {
               ? historyData
               : Array.isArray(historyData?.data)
                 ? historyData.data
-                : Array.isArray(
-                      historyData?.history
-                    )
+                : Array.isArray(historyData?.history)
                   ? historyData.history
                   : []
 
@@ -341,10 +338,10 @@ export default function LeadDetailPage() {
     }
 
     try {
+      const encodedLeadId = encodeURIComponent(leadId)
+
       const response = await fetch(
-        `/api/leads/status-history?lead_id=${encodeURIComponent(
-          leadId
-        )}`,
+        `/api/leads/status-history?lead_id=${encodedLeadId}`,
         {
           cache: 'no-store',
         }
@@ -621,8 +618,7 @@ export default function LeadDetailPage() {
 
           {/* Form Responses */}
           {lead.raw_form_data &&
-            Object.keys(lead.raw_form_data).length >
-              0 && (
+            Object.keys(lead.raw_form_data).length > 0 && (
               <div className="card p-5">
                 <p className="section-title">
                   Form Responses
@@ -765,11 +761,9 @@ export default function LeadDetailPage() {
                       }
                     </span>
 
-                    {savingStatus ===
-                    statusOption ? (
+                    {savingStatus === statusOption ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
-                    ) : status ===
-                      statusOption ? (
+                    ) : status === statusOption ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-brand-400" />
                     ) : null}
                   </button>
@@ -800,8 +794,7 @@ export default function LeadDetailPage() {
                         <div className="w-2 h-2 rounded-full bg-brand-500 mt-1 flex-shrink-0" />
 
                         {index <
-                          statusHistory.length -
-                            1 && (
+                          statusHistory.length - 1 && (
                           <div className="w-px bg-white/[0.08] flex-1 mt-1" />
                         )}
                       </div>
@@ -811,8 +804,7 @@ export default function LeadDetailPage() {
                           {historyItem.old_status
                             ? `${
                                 LEAD_STATUS_LABELS[
-                                  historyItem
-                                    .old_status
+                                  historyItem.old_status
                                 ]
                               } → `
                             : 'Created as '}
@@ -820,8 +812,7 @@ export default function LeadDetailPage() {
                           <span className="text-white font-medium">
                             {
                               LEAD_STATUS_LABELS[
-                                historyItem
-                                  .new_status
+                                historyItem.new_status
                               ]
                             }
                           </span>
