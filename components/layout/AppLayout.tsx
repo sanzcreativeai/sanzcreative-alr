@@ -18,7 +18,6 @@ export default function AppLayout({
   userName,
   userRole,
   role = 'super_admin',
-  isDemo = false,
 }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-surface flex">
@@ -30,7 +29,7 @@ export default function AppLayout({
           subtitle={subtitle}
           userName={userName}
           userRole={userRole}
-          isDemo={isDemo}
+          isDemo={false}
         />
 
         <main className="flex-1 p-4 sm:p-6">
