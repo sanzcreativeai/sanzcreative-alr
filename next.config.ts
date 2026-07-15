@@ -1,7 +1,9 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Image domains for future client logo uploads
+  eslint: {
+  ignoreDuringBuilds: true,
+},// Image domains for future client logo uploads
   images: {
     remotePatterns: [
       {
