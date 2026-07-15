@@ -18,14 +18,24 @@ export default function AppLayout({
   userName,
   userRole,
   role = 'super_admin',
-  isDemo = true,
+  isDemo = false,
 }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-surface flex">
       <Sidebar role={role} />
+
       <div className="flex-1 lg:ml-56 flex flex-col min-h-screen">
-        <Header title={title} subtitle={subtitle} userName={userName} userRole={userRole} isDemo={isDemo} />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <Header
+          title={title}
+          subtitle={subtitle}
+          userName={userName}
+          userRole={userRole}
+          isDemo={isDemo}
+        />
+
+        <main className="flex-1 p-4 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   )
